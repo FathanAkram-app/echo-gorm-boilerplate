@@ -1,3 +1,3 @@
 # echo-gorm-boilerplate
 
-## golang echo boilerplate with authorization included
+golang echo boilerplate with authorization included
