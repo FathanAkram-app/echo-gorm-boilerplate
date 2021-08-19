@@ -27,3 +27,10 @@ func LoginUser(c echo.Context) error {
 
 	return c.JSON(result.Status, result)
 }
+
+func LogoutUser(c echo.Context) error {
+	result := models.LogoutUser(
+		c.Request().Header["Authorization"][0])
+
+	return c.JSON(result.Status, result)
+}

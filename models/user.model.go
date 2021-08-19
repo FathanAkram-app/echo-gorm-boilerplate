@@ -2,9 +2,11 @@ package models
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"depmod/db"
 	"fmt"
 	"net/http"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/go-ozzo/ozzo-validation/v4/is"
@@ -18,7 +20,7 @@ type Users struct {
 	Username string
 	Email    string
 	Password string
-	Token    string
+	Token    sql.NullString
 }
 
 // func FetchAllUser() Response {
@@ -47,7 +49,8 @@ func RegisterUser(username string, email string, password string) Response {
 	user := Users{
 		Username: username,
 		Email:    email,
-		Password: password}
+		Password: password,
+		Token:    sql.NullString{Valid: false}}
 	res = UserRegisterValidator(&user, res, con)
 	user.Password = hash
 	res.Data = user
@@ -66,15 +69,36 @@ func LoginUser(email string, password string) Response {
 	if found {
 		res.Status = http.StatusOK
 		res.Message = "Success"
-		user.Token = tokenGenerator()
+		user.Token = sql.NullString{String: tokenGenerator(), Valid: true}
 		res.Data = user
+		con.Save(&user)
 		return res
 	}
 
 	res.Status = http.StatusBadRequest
 	res.Message = "your Password/Email is wrong"
+
 	return res
 
+}
+
+func LogoutUser(token string) Response {
+	var res Response
+	var user Users
+	a := strings.Split(token, " ")[1]
+	con := db.CreateCon()
+	if con.Where("token = ?", a).First(&user).RowsAffected == 0 {
+		res.Status = http.StatusBadRequest
+		res.Message = "Session not found"
+
+		return res
+	}
+	user.Token = sql.NullString{Valid: false}
+	con.Save(&user)
+	res.Status = http.StatusOK
+	res.Message = "Success"
+
+	return res
 }
 
 func UserLoginValidator(con *gorm.DB, email string, password string) (Users, bool) {
@@ -87,7 +111,7 @@ func UserLoginValidator(con *gorm.DB, email string, password string) (Users, boo
 }
 
 func tokenGenerator() string {
-	b := make([]byte, 128)
+	b := make([]byte, 64)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
 }
