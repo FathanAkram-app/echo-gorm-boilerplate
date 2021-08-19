@@ -12,12 +12,18 @@ import (
 // }
 
 func RegisterUser(c echo.Context) error {
-	result, err := models.RegisterUser(
+	result := models.RegisterUser(
 		c.FormValue("username"),
 		c.FormValue("email"),
 		c.FormValue("password"))
-	if err != nil {
-		return c.JSON(result.Status, err)
-	}
+
+	return c.JSON(result.Status, result)
+}
+
+func LoginUser(c echo.Context) error {
+	result := models.LoginUser(
+		c.FormValue("email"),
+		c.FormValue("password"))
+
 	return c.JSON(result.Status, result)
 }

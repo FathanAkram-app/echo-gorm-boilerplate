@@ -1,20 +1,24 @@
 package models
 
 import (
+	"crypto/rand"
 	"depmod/db"
+	"fmt"
 	"net/http"
 
 	validation "github.com/go-ozzo/ozzo-validation"
+	"github.com/go-ozzo/ozzo-validation/v4/is"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type Users struct {
 	gorm.Model
-	ID       uint `gorm:"primarykey,AUTO_INCREMENT"`
+	ID       int64
 	Username string
 	Email    string
 	Password string
+	Token    string
 }
 
 // func FetchAllUser() Response {
@@ -34,31 +38,103 @@ type Users struct {
 
 // }
 
-func RegisterUser(username string, email string, password string) (Response, error) {
+func RegisterUser(username string, email string, password string) Response {
 	var res Response
-	hashed, _ := HashPassword(password)
+	con := db.CreateCon()
+
+	hash, _ := HashPassword(password)
 
 	user := Users{
 		Username: username,
 		Email:    email,
-		Password: hashed}
-
-	res.Status = http.StatusOK
-	res.Message = "success"
+		Password: password}
+	res = UserRegisterValidator(&user, res, con)
+	user.Password = hash
 	res.Data = user
 
-	err := validation.Validate(user)
+	if res.Status == 200 {
+		con.Create(&user)
+	}
+	return res
+
+}
+
+func LoginUser(email string, password string) Response {
+	var res Response
+	con := db.CreateCon()
+	user, found := UserLoginValidator(con, email, password)
+	if found {
+		res.Status = http.StatusOK
+		res.Message = "Success"
+		user.Token = tokenGenerator()
+		res.Data = user
+		return res
+	}
+
+	res.Status = http.StatusBadRequest
+	res.Message = "your Password/Email is wrong"
+	return res
+
+}
+
+func UserLoginValidator(con *gorm.DB, email string, password string) (Users, bool) {
+	var user Users
+	if con.Where("email = ?", email).First(&user).RowsAffected > 0 && CheckPasswordHash(password, user.Password) {
+		return user, true
+	}
+	return user, false
+
+}
+
+func tokenGenerator() string {
+	b := make([]byte, 128)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
+
+func UserRegisterValidator(user *Users, res Response, con *gorm.DB) Response {
+
+	if con.Where("email = ?", user.Email).First(&user).RowsAffected > 0 {
+		res.Status = http.StatusBadRequest
+		res.Message = "email already registered"
+		return res
+	}
+
+	err := validation.Validate(
+		user.Username,
+		validation.Required,
+		validation.Length(4, 32))
+
 	if err != nil {
 		res.Status = http.StatusBadRequest
-		res.Message = "failed"
-		return res, err
+		res.Message = "username: " + err.Error()
+		return res
 	}
-	con := db.CreateCon()
 
-	con.Create(&user)
+	err = validation.Validate(
+		user.Email,
+		validation.Required,
+		validation.Length(4, 64),
+		is.Email)
 
-	return res, nil
+	if err != nil {
+		res.Status = http.StatusBadRequest
+		res.Message = "email: " + err.Error()
+		return res
+	}
+	err = validation.Validate(
+		user.Password,
+		validation.Required,
+		validation.Length(6, 32))
 
+	if err != nil {
+		res.Status = http.StatusBadRequest
+		res.Message = "password: " + err.Error()
+		return res
+	}
+	res.Status = http.StatusOK
+	res.Message = "Success"
+	return res
 }
 
 func HashPassword(password string) (string, error) {

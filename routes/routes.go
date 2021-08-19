@@ -18,5 +18,7 @@ func Init() *echo.Echo {
 
 	e.POST("/register/user", controllers.RegisterUser)
 
+	e.POST("/login/user", controllers.LoginUser)
+
 	return e
 }
